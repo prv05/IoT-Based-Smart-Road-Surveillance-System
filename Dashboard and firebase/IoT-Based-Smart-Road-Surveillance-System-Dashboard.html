@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Road Solutions - Dashboard</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    
+    <style>
+        :root {
+            --bg-color: #1c1c24;
+            --card-bg-color: #2a2a35;
+            --text-color: #e0e0e0;
+            --primary-color: #4A90E2; /* Blue */
+            --secondary-color: #50e3c2; /* Greenish */
+            --alert-red: #f44336;
+            --alert-orange: #ff9800;
+            --alert-green: #4CAF50;
+            --border-color: #3b3b45;
+            --font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* --- Header --- */
+        .header {
+            background-color: var(--card-bg-color);
+            padding: 15px 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header .logo {
+            display: flex;
+            align-items: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+        .header .logo img {
+            height: 30px;
+            margin-right: 10px;
+        }
+        .header .nav-item {
+            margin-left: 30px;
+            font-size: 1.1em;
+            color: var(--text-color);
+            text-decoration: none;
+            position: relative;
+        }
+        .header .nav-item::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background-color: var(--primary-color);
+            transition: width 0.3s ease;
+        }
+        .header .nav-item:hover::after,
+        .header .nav-item.active::after {
+            width: 100%;
+        }
+        .header .user-info {
+            display: flex;
+            align-items: center;
+        }
+        .header .user-info .admin-text {
+            margin-right: 10px;
+            font-size: 0.9em;
+            color: #ccc;
+        }
+        .header .user-info img {
+            height: 30px;
+            width: 30px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .header .user-info select {
+            background-color: var(--card-bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 5px;
+            border-radius: 5px;
+        }
+
+        /* --- Main Content Layout --- */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+            padding: 20px;
+            flex-grow: 1;
+        }
+        .grid-left {
+            display: grid;
+            grid-template-rows: 1.5fr 1fr;
+            gap: 20px;
+        }
+        .grid-right {
+            display: grid;
+            grid-template-rows: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .grid-bottom {
+            grid-column: 1 / -1; /* Spans full width */
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        /* This rule will create 2 columns of cards in the right grid */
+        .grid-right {
+            grid-template-columns: 1fr 1fr;
+        }
+        /* This rule makes the right-side cards span both new columns */
+        .grid-right > .card {
+            grid-column: 1 / -1;
+        }
+        /* This rule makes the bottom charts span both main columns */
+        .grid-bottom {
+            grid-column: 1 / -1;
+        }
+        
+        /* This rule creates a 2-column layout for the map + speed cards */
+        .grid-left {
+             grid-template-columns: 1fr 1fr;
+             grid-template-rows: auto; /* Remove fixed row height */
+             grid-column: 1 / -1; /* Make left grid span full width */
+             gap: 20px;
+        }
+        .grid-left-top {
+            grid-column: 1 / -1; /* Make map span full width */
+        }
+        /* This creates the two-column layout for the node cards */
+        .node-card-container {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        /* --- Card Styles --- */
+        .card {
+            background-color: var(--card-bg-color);
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden; /* For map animations */
+        }
+        .card h2 {
+            margin-top: 0;
+            color: var(--primary-color);
+            font-size: 1.3em;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        /* --- Dynamic Speed Limit Card --- */
+        .speed-card-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Center content in the card */
+            gap: 20px;
+        }
+        .speed-display {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 120px;
+            flex-shrink: 0;
+        }
+        .speed-gauge {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: 8px solid var(--primary-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: var(--secondary-color);
+            margin-bottom: 10px;
+        }
+        .speed-status {
+            font-size: 0.9em;
+            color: #aaa;
+            text-align: center;
+        }
+        .speed-limit-override-btn {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            margin-top: 15px;
+            transition: background-color 0.2s;
+        }
+        .speed-limit-override-btn:hover {
+            background-color: #3b7ad8;
+        }
+
+        /* --- Map Styling (SVG) --- */
+        .map-container {
+            flex-grow: 1;
+            height: 250px; /* Adjust height as needed */
+            position: relative;
+            background-color: #333; /* Darker background for map */
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            width: 100%;
+        }
+        .road-map-svg {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        .road-lane {
+            stroke: #444;
+            stroke-width: 10;
+            fill: none;
+        }
+        .road-divider {
+            stroke: #666;
+            stroke-dasharray: 5 5;
+            stroke-width: 2;
+        }
+        .current-segment {
+            fill: rgba(74, 144, 226, 0.3); /* Transparent blue highlight */
+        }
+        .vehicle, .ambulance {
+            fill: #fff; /* White vehicles by default */
+            transition: transform 0.1s linear; /* Smooth movement */
+        }
+        .ambulance {
+            fill: var(--alert-red); /* Red ambulance */
+        }
+        .pothole-marker {
+            fill: var(--alert-orange);
+            stroke: #333;
+            stroke-width: 1;
+        }
+        .map-text {
+            font-family: var(--font-family);
+            font-size: 10px;
+            fill: var(--text-color);
+        }
+
+        /* --- Map Overlays --- */
+        .map-overlay-text {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            color: var(--text-color);
+        }
+        .map-overlay-section {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(0,0,0,0.6);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.8em;
+            color: var(--text-color);
+        }
+
+        /* --- Vehicle Count (Global) --- */
+        .global-vehicle-count {
+            grid-column: 1 / -1; /* Span full width */
+            text-align: center;
+            font-size: 1.8em;
+            font-weight: bold;
+            color: var(--secondary-color);
+            padding: 10px;
+            background: var(--card-bg-color);
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        /* --- Alerts & Incidents Card --- */
+        .alerts-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 250px; /* Adjust height */
+            overflow-y: auto;
+        }
+        .alerts-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        .alerts-list::-webkit-scrollbar-track {
+            background: var(--card-bg-color);
+        }
+        .alerts-list::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 4px;
+        }
+        .alert-item {
+            display: flex;
+            align-items: center;
+            background-color: #333340;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            font-size: 0.9em;
+            border-left: 4px solid;
+        }
+        .alert-item.traffic { border-color: var(--alert-orange); }
+        .alert-item.pothole { border-color: var(--alert-red); }
+        .alert-item.emergency { border-color: var(--primary-color); }
+        .alert-item .icon {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+        .alert-item .details {
+            flex-grow: 1;
+        }
+        .alert-item .time {
+            font-size: 0.8em;
+            color: #aaa;
+        }
+        .ack-button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.85em;
+            margin-top: 15px;
+            display: block;
+            width: fit-content;
+            margin-left: auto;
+            transition: background-color 0.2s;
+        }
+        .ack-button:hover {
+            background-color: #3b7ad8;
+        }
+
+        .count-widget {
+            background-color: #333340;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .count-widget label {
+            display: block;
+            font-size: 0.9em;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        .count-widget .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+
+        /* --- Charts --- */
+        .chart-container {
+            height: 250px;
+            width: 100%;
+        }
+        .chart-title {
+            color: var(--primary-color);
+            font-size: 1.1em;
+            margin-bottom: 10px;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 5px;
+        }
+
+        /* --- Footer (for Incident Trends title) --- */
+        .footer-title {
+            grid-column: 1 / -1;
+            padding-top: 20px;
+            color: var(--primary-color);
+            font-size: 1.3em;
+            border-top: 1px solid var(--border-color);
+            margin-top: 20px;
+        }
+        
+        /* --- Modal for Override --- */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.7);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: var(--card-bg-color);
+            margin: auto;
+            padding: 30px;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            width: 400px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.5);
+        }
+        .modal-content h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+            font-size: 1.4em;
+        }
+        .modal-content select,
+        .modal-content input[type="number"] {
+            width: calc(100% - 20px);
+            padding: 12px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            background-color: #333340;
+            color: var(--text-color);
+            border-radius: 8px;
+            font-size: 1.1em;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: space-between;
+        }
+        .modal-buttons button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.2s;
+        }
+        .modal-buttons .submit {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .modal-buttons .submit:hover {
+            background-color: #3b7ad8;
+        }
+        .modal-buttons .cancel {
+            background-color: #6c757d;
+            color: white;
+        }
+        .modal-buttons .cancel:hover {
+            background-color: #5a6268;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: var(--text-color);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        /* --- Utility Classes --- */
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .flex-grow { flex-grow: 1; }
+        .status-online { color: var(--secondary-color); }
+        .status-offline { color: var(--alert-red); }
+
+        /* --- Global Alert Bar --- */
+        #global-alert-bar {
+            background-color: var(--alert-green);
+            color: white;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px;
+            font-size: 1.2em;
+            display: none; /* Hidden by default */
+        }
+        #global-alert-bar.active {
+            display: block;
+            background-color: var(--alert-red);
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(244, 67, 54, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(244, 67, 54, 0); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div style="display: flex; align-items: center;">
+            <div class="logo">
+                <img src="https://www.svgrepo.com/show/360416/road.svg" alt="Road Logo">
+                Smart Road Solutions
+            </div>
+            <a href="#" class="nav-item active">ROAD SURVEILLANCE OPERATIONS</a>
+        </div>
+        <div class="user-info">
+            <span class="admin-text">Admin</span>
+            <img src="https://www.svgrepo.com/show/507025/user-circle.svg" alt="User Icon">
+            <select>
+                <option>Main_Highway_01</option>
+            </select>
+        </div>
+    </div>
+    
+    <div id="global-alert-bar">SYSTEM CLEAR</div>
+
+    <div class="dashboard-grid">
+
+        <div class="card grid-left-top">
+            <h2>LIVE ROAD MAP</h2>
+            <div class="map-container">
+                <svg class="road-map-svg" viewBox="0 0 800 300">
+                    <rect x="0" y="0" width="800" height="300" fill="#333" />
+                    
+                    <path id="roadPath1" d="M0,100 L800,100" class="road-lane" />
+                    <path id="roadPath2" d="M0,200 L800,200" class="road-lane" />
+                    <path id="dividerPath" d="M0,150 L800,150" class="road-divider" />
+
+                    <rect id="segment-node1" x="0" y="0" width="400" height="300" fill="rgba(74, 144, 226, 0.2)" />
+                    <rect id="segment-node2" x="400" y="0" width="400" height="300" fill="rgba(80, 227, 194, 0.2)" />
+                    
+                    <text x="190" y="280" class="map-text">NODE 01 SEGMENT</text>
+                    <text x="590" y="280" class="map-text">NODE 02 SEGMENT</text>
+                    
+                    <g id="vehicles-layer-n1"></g>
+                    <g id="potholes-layer-n1"></g>
+                    <g id="vehicles-layer-n2"></g>
+                    <g id="potholes-layer-n2"></g>
+                    
+                    <rect id="ambulance-icon" x="-50" y="160" width="30" height="20" rx="3" class="ambulance" style="display:none;" />
+                    <text id="ambulance-text" x="-50" y="150" class="map-text" fill="var(--alert-red)" style="display:none;">AMBULANCE</text>
+
+                    <text x="10" y="25" class="map-text">Re:5 Southbound</text>
+                    <text x="10" y="45" class="map-text">Node 1: <tspan class="status-online" id="map-node1-status">Offline</tspan></text>
+                    <text x="10" y="60" class="map-text">Node 2: <tspan class="status-online" id="map-node2-status">Offline</tspan></text>
+                </svg>
+            </div>
+             <div class="global-vehicle-count">
+                TOTAL LIVE VEHICLE COUNT: <span id="dashboard-vehicle-count">0</span>
+            </div>
+        </div>
+
+        <div class="node-card-container">
+            <div class="card" id="node-1-card">
+                <h2>NODE 01</h2>
+                <div class="speed-card-content">
+                    <div class="speed-display">
+                        <div class="speed-gauge"><span id="n1-speed">--</span></div>
+                        <div class="speed-status"><span id="n1-speed-status">Offline</span></div>
+                    </div>
+                    <div class="count-widget" style="width: 100%;">
+                        <label>Vehicles:</label>
+                        <div class="value" id="n1-vehicles">--</div>
+                    </div>
+                    <div class="count-widget" style="width: 100%;">
+                        <label>Potholes:</label>
+                        <div class="value" id="n1-potholes">--</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card" id="node-2-card">
+                <h2>NODE 02</h2>
+                <div class="speed-card-content">
+                    <div class="speed-display">
+                        <div class="speed-gauge"><span id="n2-speed">--</span></div>
+                        <div class="speed-status"><span id="n2-speed-status">Offline</span></div>
+                    </div>
+                    <div class="count-widget" style="width: 100%;">
+                        <label>Vehicles:</label>
+                        <div class="value" id="n2-vehicles">--</div>
+                    </div>
+                    <div class="count-widget" style="width: 100%;">
+                        <label>Potholes:</label>
+                        <div class="value" id="n2-potholes">--</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card grid-right">
+            <h2>ALERTS & INCIDENTS</h2>
+            <div class="count-widget">
+                <label>GLOBAL POTHOLE ALERT COUNT:</label>
+                <div class="value" id="dashboard-pothole-alert-count">0</div>
+            </div>
+            <ul class="alerts-list" id="alerts-list">
+                </ul>
+            <div class="count-widget" style="margin-top: 25px; background-color: #3f3030; border: 1px solid var(--alert-red);">
+                <label style="color: var(--alert-red);">EMERGENCY VEHICLE COUNT</label>
+                <div class="value" id="dashboard-emergency-vehicle-count" style="color: var(--alert-red);">0</div>
+            </div>
+        </div>
+
+        <div class="card grid-right">
+            <h2>MANUAL OVERRIDE</h2>
+            <button class="speed-limit-override-btn" onclick="openOverrideModal()" style="width: 100%; padding: 15px; font-size: 1.1em;">Open Override Panel</button>
+        </div>
+
+        <div class="card grid-bottom-left">
+            <h2>HISTORICAL DATA</h2>
+            <div class="chart-title">Traffic Volume (Hourly)</div>
+            <div class="chart-container">
+                <canvas id="trafficVolumeChart"></canvas>
+            </div>
+        </div>
+        <div class="card grid-bottom-right">
+            <h2>INCIDENT TRENDS</h2>
+            <div class="chart-title">Recent Incident Types</div>
+            <div class="chart-container">
+                <canvas id="incidentTrendsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="overrideModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeOverrideModal()">&times;</span>
+            <h3>Manual Speed Override</h3>
+            <label for="overrideNodeSelect">Select Node:</label>
+            <select id="overrideNodeSelect" style="width: 100%; padding: 10px; margin-bottom: 15px; background-color: #333340; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 5px;">
+                <option value="Node_01">Node 01</option>
+                <option value="Node_02">Node 02</option>
+            </select>
+            <input type="number" id="manualOverrideSpeedInput" placeholder="Enter speed (e.g., 30, 45, 65)">
+            <div class="modal-buttons">
+                <button class="submit" onclick="applyManualOverride()">Apply Override</button>
+                <button class="cancel" onclick="releaseManualOverride()">Release Override</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // -----------------------------------------------------------------
+        // TODO: PASTE YOUR FIREBASE CONFIGURATION HERE
+        // -----------------------------------------------------------------
+        const firebaseConfig = {
+        apiKey: "AIzaSyCy5BEx_fMiO3q0tN4EEXWHxXsxLFkjKvk",
+        authDomain: "pratham-smart-road.firebaseapp.com",
+        databaseURL: "https://pratham-smart-road-default-rtdb.firebaseio.com",
+        projectId: "pratham-smart-road",
+        storageBucket: "pratham-smart-road.firebasestorage.app",
+        messagingSenderId: "375408190397",
+        appId: "1:375408190397:web:b6cf06a4544824f09028d4",
+        measurementId: "G-6VVFRK6J0F"
+      };
+        // -----------------------------------------------------------------
+
+        // --- Initialize Firebase ---
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // --- HTML Element References ---
+        const globalAlertBar = document.getElementById('global-alert-bar');
+        const dashboardVehicleCount = document.getElementById('dashboard-vehicle-count');
+        const dashboardPotholeAlertCount = document.getElementById('dashboard-pothole-alert-count');
+        const dashboardEmergencyVehicleCount = document.getElementById('dashboard-emergency-vehicle-count');
+        const alertsList = document.getElementById('alerts-list');
+
+        // Map elements
+        const mapNode1Status = document.getElementById('map-node1-status');
+        const mapNode2Status = document.getElementById('map-node2-status');
+        const vehiclesLayerN1 = document.getElementById('vehicles-layer-n1');
+        const potholesLayerN1 = document.getElementById('potholes-layer-n1');
+        const vehiclesLayerN2 = document.getElementById('vehicles-layer-n2');
+        const potholesLayerN2 = document.getElementById('potholes-layer-n2');
+        const ambulanceIcon = document.getElementById('ambulance-icon');
+        const ambulanceText = document.getElementById('ambulance-text');
+        
+        // Node 1 Card Elements
+        const n1Speed = document.getElementById('n1-speed');
+        const n1SpeedStatus = document.getElementById('n1-speed-status');
+        const n1Vehicles = document.getElementById('n1-vehicles');
+        const n1Potholes = document.getElementById('n1-potholes');
+        const n1Card = document.getElementById('node-1-card');
+
+        // Node 2 Card Elements
+        const n2Speed = document.getElementById('n2-speed');
+        const n2SpeedStatus = document.getElementById('n2-speed-status');
+        const n2Vehicles = document.getElementById('n2-vehicles');
+        const n2Potholes = document.getElementById('n2-potholes');
+        const n2Card = document.getElementById('node-2-card');
+
+        // Modal Elements
+        const overrideModal = document.getElementById('overrideModal');
+        const overrideNodeSelect = document.getElementById('overrideNodeSelect');
+        const manualOverrideSpeedInput = document.getElementById('manualOverrideSpeedInput');
+        
+        // --- Global State ---
+        let nodeData = {
+            "Node_01": { speed: 0, vehicles: 0, potholes: 0, ambulanceActive: false, manualOverride: -1, lastSeen: 0 },
+            "Node_02": { speed: 0, vehicles: 0, potholes: 0, ambulanceActive: false, manualOverride: -1, lastSeen: 0 }
+        };
+        let activeAlerts = [];
+        const MAX_ALERTS = 5;
+
+        // --- Chart Instances ---
+        let trafficVolumeChart;
+        let incidentTrendsChart;
+
+        // --- Helper Functions ---
+        function varColor(variable) {
+            return getComputedStyle(document.documentElement).getPropertyValue(variable);
+        }
+
+        // --- Chart Initialization ---
+        function initializeCharts() {
+            // (Chart.js initialization code from previous response)
+            // ... [Chart.js init code here] ...
+            const trafficVolumeCtx = document.getElementById('trafficVolumeChart').getContext('2d');
+            trafficVolumeChart = new Chart(trafficVolumeCtx, {
+                type: 'line',
+                data: {
+                    labels: ['-5h', '-4h', '-3h', '-2h', '-1h', 'Now'], 
+                    datasets: [{
+                        label: 'Traffic Volume',
+                        data: [10, 15, 12, 18, 20, 16], 
+                        borderColor: varColor('--primary-color'),
+                        backgroundColor: 'rgba(74, 144, 226, 0.2)',
+                        tension: 0.3,
+                        pointBackgroundColor: varColor('--secondary-color')
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: varColor('--border-color') }, ticks: { color: varColor('--text-color') } },
+                        y: { grid: { color: varColor('--border-color') }, ticks: { color: varColor('--text-color') } }
+                    }
+                }
+            });
+
+            const incidentTrendsCtx = document.getElementById('incidentTrendsChart').getContext('2d');
+            incidentTrendsChart = new Chart(incidentTrendsCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Pothole', 'Traffic', 'Ambulance'],
+                    datasets: [{
+                        label: 'Incidents',
+                        data: [5, 10, 2], 
+                        backgroundColor: [
+                            varColor('--alert-orange'),
+                            varColor('--primary-color'),
+                            varColor('--alert-red')
+                        ],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: varColor('--text-color') } },
+                        y: { grid: { color: varColor('--border-color') }, ticks: { color: varColor('--text-color') } }
+                    }
+                }
+            });
+        }
+        
+        // --- Firebase Listeners ---
+        
+        function setupFirebaseListeners() {
+            // Listen to Node 1 Data
+            database.ref('nodes/Node_01').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    nodeData["Node_01"] = {
+                        speed: data.current_speed || 0,
+                        vehicles: data.vehicles_detected || 0,
+                        potholes: data.potholes_detected || 0,
+                        manualOverride: data.manual_override || -1,
+                        lastSeen: data.last_seen || 0
+                    };
+                    updateNodeUI("Node_01");
+                }
+            });
+
+            // Listen to Node 2 Data
+            database.ref('nodes/Node_02').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    nodeData["Node_02"] = {
+                        speed: data.current_speed || 0,
+                        vehicles: data.vehicles_detected || 0,
+                        potholes: data.potholes_detected || 0,
+                        manualOverride: data.manual_override || -1,
+                        lastSeen: data.last_seen || 0
+                    };
+                    updateNodeUI("Node_02");
+                }
+            });
+
+            // Listen to Node 1 Ambulance Status
+            database.ref('ambulance_alert/Node_01_status').on('value', (snapshot) => {
+                const isActive = (snapshot.val() === 'ACTIVE');
+                if (isActive && !nodeData["Node_01"].ambulanceActive) {
+                    addAlert("emergency", "Ambulance detected at Node 01!");
+                }
+                nodeData["Node_01"].ambulanceActive = isActive;
+                updateGlobalAlerts();
+            });
+
+            // Listen to Node 2 Ambulance Status
+            database.ref('ambulance_alert/Node_02_status').on('value', (snapshot) => {
+                const isActive = (snapshot.val() === 'ACTIVE');
+                if (isActive && !nodeData["Node_02"].ambulanceActive) {
+                    addAlert("emergency", "Ambulance detected at Node 02!");
+                }
+                nodeData["Node_02"].ambulanceActive = isActive;
+                updateGlobalAlerts();
+            });
+        }
+
+        // --- UI Update Functions ---
+
+        function updateNodeUI(nodeId) {
+            const data = nodeData[nodeId];
+            const isOnline = (Date.now() / 1000 - data.lastSeen) < 30; // 30 sec timeout
+            
+            let speedEl, statusEl, vehiclesEl, potholesEl, mapStatusEl, cardEl;
+            
+            if (nodeId === 'Node_01') {
+                speedEl = n1Speed;
+                statusEl = n1SpeedStatus;
+                vehiclesEl = n1Vehicles;
+                potholesEl = n1Potholes;
+                mapStatusEl = mapNode1Status;
+                cardEl = n1Card;
+            } else {
+                speedEl = n2Speed;
+                statusEl = n2SpeedStatus;
+                vehiclesEl = n2Vehicles;
+                potholesEl = n2Potholes;
+                mapStatusEl = mapNode2Status;
+                cardEl = n2Card;
+            }
+
+            if (isOnline) {
+                speedEl.textContent = data.speed;
+                vehiclesEl.textContent = data.vehicles;
+                potholesEl.textContent = data.potholes;
+                mapStatusEl.textContent = "Online";
+                mapStatusEl.className = "status-online";
+                cardEl.style.borderColor = "var(--secondary-color)";
+
+                if (data.manualOverride !== -1) {
+                    statusEl.textContent = `OVERRIDE (${data.manualOverride} KMPH)`;
+                    speedEl.textContent = data.manualOverride;
+                    cardEl.style.borderColor = "var(--alert-orange)";
+                } else if (data.potholes > 0) {
+                    statusEl.textContent = "Pothole Alert!";
+                    cardEl.style.borderColor = "var(--alert-red)";
+                } else {
+                    statusEl.textContent = "Adaptive Control";
+                    cardEl.style.borderColor = "var(--secondary-color)";
+                }
+                
+                // Update map visualizations
+                updateMapVisuals(nodeId, data.vehicles, data.potholes);
+
+            } else {
+                speedEl.textContent = "--";
+                statusEl.textContent = "Offline";
+                vehiclesEl.textContent = "--";
+                potholesEl.textContent = "--";
+                mapStatusEl.textContent = "Offline";
+                mapStatusEl.className = "status-offline";
+                cardEl.style.borderColor = "var(--border-color)";
+                updateMapVisuals(nodeId, 0, 0); // Clear visuals if offline
+            }
+            
+            updateGlobalCounts();
+        }
+
+        function updateGlobalCounts() {
+            let totalVehicles = 0;
+            let totalPotholes = 0;
+            
+            for (const nodeId in nodeData) {
+                const data = nodeData[nodeId];
+                if ((Date.now() / 1000 - data.lastSeen) < 30) { // Only count online nodes
+                    totalVehicles += data.vehicles;
+                    totalPotholes += data.potholes;
+                }
+            }
+            
+            dashboardVehicleCount.textContent = totalVehicles;
+            dashboardPotholeAlertCount.textContent = totalPotholes;
+
+            // Update Pothole Alert in chart
+            if (incidentTrendsChart) {
+                incidentTrendsChart.data.datasets[0].data[0] = totalPotholes;
+                incidentTrendsChart.update('none');
+            }
+        }
+
+        function updateGlobalAlerts() {
+            let n1Active = nodeData["Node_01"].ambulanceActive;
+            let n2Active = nodeData["Node_02"].ambulanceActive;
+            let emergencyCount = 0;
+            
+            if (n1Active) emergencyCount++;
+            if (n2Active) emergencyCount++;
+            
+            dashboardEmergencyVehicleCount.textContent = emergencyCount;
+            
+            // Update chart
+             if (incidentTrendsChart) {
+                incidentTrendsChart.data.datasets[0].data[2] = emergencyCount;
+                incidentTrendsChart.update('none');
+            }
+
+            // Update Global Alert Bar
+            if (n1Active || n2Active) {
+                globalAlertBar.textContent = "!! GLOBAL AMBULANCE ALERT ACTIVE !!";
+                globalAlertBar.className = "active";
+                
+                // Animate ambulance on map
+                ambulanceIcon.style.display = 'block';
+                ambulanceText.style.display = 'block';
+                animateAmbulance();
+                
+            } else {
+                globalAlertBar.textContent = "SYSTEM CLEAR";
+                globalAlertBar.className = "";
+                
+                // Hide ambulance
+                ambulanceIcon.style.display = 'none';
+                ambulanceText.style.display = 'none';
+            }
+        }
+        
+        function addAlert(type, message) {
+            const time = new Date().toLocaleTimeString();
+            
+            // Add to our internal array
+            activeAlerts.unshift({ type, message, time }); // Add to beginning
+            if (activeAlerts.length > MAX_ALERTS) {
+                activeAlerts.pop(); // Remove oldest
+            }
+
+            // Re-render the list
+            alertsList.innerHTML = ''; // Clear list
+            activeAlerts.forEach(alert => {
+                const li = document.createElement('li');
+                li.className = `alert-item ${alert.type}`;
+                li.innerHTML = `
+                    <span class="icon">${alert.type === 'pothole' ? '🛠️' : (alert.type === 'emergency' ? '🚨' : '🚗')}</span>
+                    <div class="details">
+                        ${alert.message}
+                        <div class="time">${alert.time}</div>
+                    </div>
+                `;
+                alertsList.appendChild(li);
+            });
+        }
+        
+        // --- Map Animation Functions ---
+        
+        function updateMapVisuals(nodeId, vehicleCount, potholeCount) {
+            let vehicleLayer = (nodeId === 'Node_01') ? vehiclesLayerN1 : vehiclesLayerN2;
+            let potholeLayer = (nodeId === 'Node_01') ? potholesLayerN1 : potholesLayerN2;
+            let xOffset = (nodeId === 'Node_01') ? 50 : 450;
+            
+            // Simulate Vehicles
+            vehicleLayer.innerHTML = ''; // Clear old vehicles
+            for(let i = 0; i < vehicleCount; i++) {
+                let x = xOffset + (Math.random() * 300);
+                let y = (Math.random() > 0.5) ? 120 : 170; // Random lane
+                let vehicle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                vehicle.setAttribute('x', x);
+                vehicle.setAttribute('y', y);
+                vehicle.setAttribute('width', '20');
+                vehicle.setAttribute('height', '10');
+                vehicle.setAttribute('rx', '2');
+                vehicle.setAttribute('class', 'vehicle');
+                vehicleLayer.appendChild(vehicle);
+            }
+            
+            // Simulate Potholes
+            potholeLayer.innerHTML = ''; // Clear old potholes
+            for(let i = 0; i < potholeCount; i++) {
+                 let x = xOffset + (Math.random() * 300);
+                 let y = (Math.random() > 0.5) ? 105 : 205; // Side of a lane
+                 let pothole = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                 pothole.setAttribute('cx', x);
+                 pothole.setAttribute('cy', y);
+                 pothole.setAttribute('r', '5');
+                 pothole.setAttribute('class', 'pothole-marker');
+                 potholeLayer.appendChild(pothole);
+            }
+        }
+        
+        function animateAmbulance() {
+            let xPos = -50;
+            function frame() {
+                xPos += 5; // Ambulance speed
+                if (xPos > 850) {
+                    xPos = -50; // Loop
+                }
+                ambulanceIcon.setAttribute('x', xPos);
+                ambulanceText.setAttribute('x', xPos);
+                
+                if (nodeData["Node_01"].ambulanceActive || nodeData["Node_02"].ambulanceActive) {
+                    requestAnimationFrame(frame); // Continue animation
+                }
+            }
+            requestAnimationFrame(frame); // Start animation
+        }
+
+        // --- Modal Control Functions ---
+        
+        function openOverrideModal() {
+            overrideModal.style.display = 'flex';
+        }
+
+        function closeOverrideModal() {
+            overrideModal.style.display = 'none';
+        }
+
+        function applyManualOverride() {
+            const nodeId = overrideNodeSelect.value;
+            const speed = parseInt(manualOverrideSpeedInput.value);
+            
+            if (isNaN(speed) || speed < 0) {
+                alert("Please enter a valid speed.");
+                return;
+            }
+            
+            database.ref(`nodes/${nodeId}/manual_override`).set(speed);
+            addAlert('traffic', `Manual override set for ${nodeId} to ${speed} KMPH.`);
+            closeOverrideModal();
+        }
+
+        function releaseManualOverride() {
+            const nodeId = overrideNodeSelect.value;
+            database.ref(`nodes/${nodeId}/manual_override`).set(-1);
+            addAlert('traffic', `Manual override released for ${nodeId}.`);
+            closeOverrideModal();
+        }
+        
+        // --- Page Load ---
+        window.onload = () => {
+            initializeCharts();
+            setupFirebaseListeners();
+            // Close modal if user clicks outside of it
+            window.onclick = function(event) {
+                if (event.target == overrideModal) {
+                    closeOverrideModal();
+                }
+            }
+        };
+
+    </script>
+</body>
+</html>

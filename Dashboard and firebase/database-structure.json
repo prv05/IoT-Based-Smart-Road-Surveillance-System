@@ -1,0 +1,11 @@
+{
+  "road_status": {
+    "vehicle_count": 0,
+    "traffic_density": "LOW",
+    "speed_limit": 30,
+    "manual_speed_override": null,
+    "pothole_detected": false,
+    "ambulance_detected": false,
+    "last_updated": ""
+  }
+}
